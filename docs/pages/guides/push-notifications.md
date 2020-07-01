@@ -27,6 +27,14 @@ import { Notifications } from 'expo';
 import * as Permissions from 'expo-permissions';
 import Constants from 'expo-constants';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 export default class AppContainer extends React.Component {
   state = {
     expoPushToken: '',
@@ -45,7 +53,7 @@ export default class AppContainer extends React.Component {
         alert('Failed to get push token for push notification!');
         return;
       }
-      const token = await Notifications.getExpoPushTokenAsync();
+      const { data: token } = await Notifications.getExpoPushTokenAsync();
       console.log(token);
       this.setState({ expoPushToken: token });
     } else {
@@ -53,11 +61,11 @@ export default class AppContainer extends React.Component {
     }
 
     if (Platform.OS === 'android') {
-      Notifications.createChannelAndroidAsync('default', {
+      Notifications.setNotificationChannelAsync('default', {
         name: 'default',
-        sound: true,
-        priority: 'max',
-        vibrate: [0, 250, 250, 250],
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
       });
     }
   };
@@ -70,13 +78,18 @@ export default class AppContainer extends React.Component {
     // notification (rather than just tapping the app icon to open it),
     // this function will fire on the next tick after the app starts
     // with the notification data.
-    this._notificationSubscription = Notifications.addListener(this._handleNotification);
+    this.onResponseReceivedListener = Notifications.addNotificationResponseReceivedListener(
+      this.onResponseReceived
+    );
+  }
+  
+  componentWillUnmount() {
+    this.onResponseReceivedListener.remove();
   }
 
-  _handleNotification = notification => {
-    Vibration.vibrate();
+  onResponseReceived = (notification) => {
     console.log(notification);
-    this.setState({ notification: notification });
+    this.setState({ notification });
   };
 
   // Can use this function below, OR use Expo's Push Notification Tool-> https://expo.io/dashboard/notifications
@@ -87,7 +100,6 @@ export default class AppContainer extends React.Component {
       title: 'Original Title',
       body: 'And here is the body!',
       data: { data: 'goes here' },
-      _displayInForeground: true,
     };
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
@@ -109,8 +121,9 @@ export default class AppContainer extends React.Component {
           justifyContent: 'space-around',
         }}>
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <Text>Origin: {this.state.notification.origin}</Text>
-          <Text>Data: {JSON.stringify(this.state.notification.data)}</Text>
+          <Text>Title: {this.state.notification.request.content.title}</Text>
+          <Text>Body: {this.state.notification.request.content.body}</Text>
+          <Text>Data: {JSON.stringify(this.state.notification.request.content.data)}</Text>
         </View>
         <Button title={'Press to Send Notification'} onPress={() => this.sendPushNotification()} />
       </View>
